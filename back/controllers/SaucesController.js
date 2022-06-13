@@ -1,4 +1,5 @@
 const fs = require("fs");
+const Jwt = require('jsonwebtoken');
 const Sauce = require('../models/Sauce');
 
 class SaucesController
@@ -93,8 +94,24 @@ class SaucesController
      */
     update(req, res)
     {
+        const token = SaucesController.getToken(req);
+
+        if(token === false) {
+            return res.status(403).send({
+                message: "No token provided!"
+            });
+        }
+        const decoded = Jwt.verify(token, process.env.JWT_SECRET);
+
         Sauce.findOne({ _id: req.params.id })
             .then((sauce) => {
+                // Verify that the connected user is the creator of the sauce.
+                if (sauce.userId !== decoded.userId) {
+                    return res.status(403).json({
+                        message: "Not the creator of the sauce!"
+                    });
+                }
+
                 const filename = sauce.imageUrl.split("/images/")[1];
 
                 // The file is not allowed or the user has not changed the original file.
@@ -127,6 +144,7 @@ class SaucesController
      *
      * @param {object} req The request object.
      * @param {object} res The response object.
+     * @param {object} sauceObject The data to save.
      *
      * @returns {void}
      */
@@ -155,10 +173,26 @@ class SaucesController
      */
     destroy(req, res)
     {
+        const token = SaucesController.getToken(req);
+
+        if(token === false) {
+            return res.status(403).send({
+                message: "No token provided!"
+            });
+        }
+        const decoded = Jwt.verify(token, process.env.JWT_SECRET);
+
         Sauce.findOne({
                 _id: req.params.id
             })
             .then((sauce) => {
+                // Verify that the connected user is the creator of the sauce.
+                if (sauce.userId !== decoded.userId) {
+                    return res.status(403).json({
+                        message: "Not the creator of the sauce!"
+                    });
+                }
+
                 const filename = sauce.imageUrl.split("/images/")[1]; // Get filename.
 
                 // Delete the file then delete the sauce in database.
@@ -218,8 +252,8 @@ class SaucesController
                 break;
 
             case 0:
-                // If the usersLike array contain the user id, that means the user has like the post
-                // else it was a dislike, and we must delete the
+                // If the usersLike array contain the user id, that means the user has liked the post
+                // else it was a dislike, and we must delete the id from the array.
                 if (usersLiked.includes(userId)) {
                     const index = usersLiked.indexOf(userId);
 
@@ -268,6 +302,29 @@ class SaucesController
                     message: error.message
                 })
             });
+    }
+
+    /**
+     * Get the token from the header.
+     *
+     * @param {object} req
+     *
+     * @returns {false|string} False if no token or invalid token, else the token.
+     */
+    static getToken(req)
+    {
+        const bearerHeader = req.headers["authorization"];
+
+        if (typeof bearerHeader === 'undefined') {
+            return false;
+        }
+        const token = bearerHeader.split(' ')[1];
+
+        if (typeof token === 'undefined') {
+            return false;
+        }
+
+        return token;
     }
 }
 
